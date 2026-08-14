@@ -4,7 +4,7 @@ A windows service that can capture readings from "smart meters" and log them to 
 
 ### Requirements
 
-- [rtl_tcp](https://osmocom.org/projects/rtl-sdr/wiki/Rtl-sdr#Windows) to tune and read the rtl-sdr dongle.
+- [rtl_tcp](https://github.com/rtlsdrblog/rtl-sdr-blog/releases) (rtl-sdr-blog build, V1.3.2 or later) to tune and read the rtl-sdr dongle. See the note below on Windows crashes with older builds.
 - [rtlamr](https://github.com/bemasher/rtlamr) to decode the SCM+ messages from the feed.
 - GoLang >=1.11 (Go build environment setup guide: http://golang.org/doc/code.html) to build rtlamr.
 - [.NET 6 Runtime](https://dotnet.microsoft.com/download/dotnet/6.0), or the SDK if building from source.
@@ -25,6 +25,30 @@ A windows service that can capture readings from "smart meters" and log them to 
 - Modify the `appsettings.json` file: set `FullPathToRtlAmr` to your rtlamr executable and set the connection string for your SQL Server database. Start the service and have it capture.
 
 To test, run rtlamr at the command line using msgtype all, to make sure your able to capture messages.
+
+### rtl_tcp crashes on Windows when a client connects
+
+Builds of rtl_tcp from before August 2023 crash with an access violation in ntdll.dll as soon as
+a client (rtlamr, in this case) connects to it. rtl_tcp accepts the connection and appears to be
+running, but dies within a second or two of the first client attaching, which then causes
+RtlAmrCapture to fail its connection and restart repeatedly.
+
+This was fixed upstream in [rtl-sdr-blog V1.3.2](https://github.com/rtlsdrblog/rtl-sdr-blog/releases/tag/V1.3.2)
+("Fixed rtl_tcp on Windows"). If your rtl_tcp folder predates August 2023, or you are unsure,
+download the [latest release](https://github.com/rtlsdrblog/rtl-sdr-blog/releases/latest) and
+replace rtl_tcp.exe and its supporting DLLs.
+
+A few things to know about the newer builds:
+
+- The core DLL is renamed from `librtlsdr.dll` to `rtlsdr.dll`. Copy the whole release rather than
+  overwriting individual files, so nothing is left pointing at the old name.
+- `libusb-1.0.dll` and `libwinpthread-1.dll` are no longer required. libusb support is compiled
+  directly into `rtlsdr.dll`; you can leave the old DLLs in place, they are simply unused.
+- `rtlsdr.dll` also references `UsbDkHelper.dll`, an alternate USB backend. This is only loaded if
+  you are actually using UsbDk, so a normal WinUSB/Zadig-driven dongle setup runs fine without that
+  DLL present.
+- The new build bundles `msvcr100.dll` and `pthreadVC2.dll`, so no separate Visual C++ Redistributable
+  install is needed for rtl_tcp itself.
 
 ### Configuration
 

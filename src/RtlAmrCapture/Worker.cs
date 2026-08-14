@@ -31,7 +31,7 @@ namespace RtlAmrCapture
         /// </summary>
         /// <param name="line"></param>
         /// <param name="cancellationToken"></param>
-        private async void LineCapture(string line, CancellationToken cancellationToken)
+        private async Task LineCapture(string line, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(line)) return;
             try
@@ -46,13 +46,27 @@ namespace RtlAmrCapture
                 await _captureService.CapturePacket(obj, cancellationToken);
                 OnSuccessfulCapture();
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Either the service is stopping or WatchingAndRecoverTask cancelled the
+                // listener after detecting a hang. Both are normal control flow: the listening
+                // loop will rebuild the token source and restart capture.
+                _logger.LogDebug("Packet processing cancelled while shutting down or restarting the listener.");
+            }
             catch (Exception e)
             {
-                _logger.LogError(e, "Main loop error processing packet. {line}", line);
-                throw;
+                // Deliberately not rethrown.
+                //
+                // This method runs detached from ListeningTask -- it is invoked from the
+                // process stdout callback, not awaited by the loop below. It was previously
+                // declared 'async void' and rethrew here, so any exception (most often a
+                // TaskCanceledException from an in-flight SQL insert when the hang watchdog
+                // fired) had no Task to be observed on and tore down the process instead of
+                // being handled by ListeningTask's catch blocks.
+                //
+                // A single unwritable meter reading must never take down the capture service.
+                _logger.LogError(e, "Error processing packet, dropping this reading. {line}", line);
             }
-
-            return;
         }
 
 

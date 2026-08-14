@@ -7,14 +7,14 @@ A windows service that can capture readings from "smart meters" and log them to 
 - [rtl_tcp](https://osmocom.org/projects/rtl-sdr/wiki/Rtl-sdr#Windows) to tune and read the rtl-sdr dongle.
 - [rtlamr](https://github.com/bemasher/rtlamr) to decode the SCM+ messages from the feed.
 - GoLang >=1.11 (Go build environment setup guide: http://golang.org/doc/code.html) to build rtlamr.
-- [.NET 6 Runtime](https://dotnet.microsoft.com/download/dotnet/6.0) (or the SDK, to build from source).
+- [.NET 6 Runtime](https://dotnet.microsoft.com/download/dotnet/6.0), or the SDK if building from source.
 - SQL Server (Developer / Express / Community Edition).
 
 ### Usage
 - Install [rtl_tcp] on a machine running the sdr-dongle. This can be installed on its own device if you configure it to allow remote connections.
 - Install GO
 - Install the latest rtlamr using GO
-- Install MSSQL (Developer / Community Edition) and create a new database. The `RtlamrRaw` table and its index are created automatically on first start -- you only need the database itself.
+- Install MSSQL (Developer / Community Edition) and create a new database. The `RtlamrRaw` table and its index are created automatically on first start, so you only need to create the database itself.
 - Install RtlAmr-Capture as a windows service using `sc.exe`:
 
   ```
@@ -32,20 +32,20 @@ All settings live under `ServiceConfiguration` in `appsettings.json`.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `FullPathToRtlAmr` | -- | Full path to `rtlamr.exe`. |
-| `RtlAmrArguments` | -- | Arguments passed to rtlamr. Add `-server <host>:<port>` when rtl_tcp runs on another machine. |
+| `FullPathToRtlAmr` | (required) | Full path to `rtlamr.exe`. |
+| `RtlAmrArguments` | (required) | Arguments passed to rtlamr. Add `-server <host>:<port>` when rtl_tcp runs on another machine. |
 | `HangDetectionMinutes` | 5 | Restart the listener if no reading arrives within this many minutes. |
-| `RestartCountToShutdown` | 5 | Consecutive listener restarts before the service exits (letting Windows restart it). |
+| `RestartCountToShutdown` | 5 | Consecutive listener restarts before the service exits, letting Windows restart it. |
 | `SqlCommandTimeoutSeconds` | 30 | Timeout for each SQL command. Raise it if the database is on slow or contended storage. |
 | `SqlRetryCount` | 3 | Attempts per insert before the reading is logged and dropped. |
-| `SqlRetryBaseDelayMs` | 200 | Base retry backoff, doubling per attempt (200ms, 400ms, 800ms...). |
-| `Connections` | -- | One entry per destination database, each naming a key in `ConnectionStrings`. |
+| `SqlRetryBaseDelayMs` | 200 | Base retry backoff, doubling per attempt (200ms, 400ms, 800ms). |
+| `Connections` | (required) | One entry per destination database, each naming a key in `ConnectionStrings`. |
 
 Connection strings themselves go in the standard `ConnectionStrings` section, keyed by the
 `ConnectionStringName` referenced from `Connections`.
 
-A failed insert never stops capture: the reading is retried with backoff and, if it still cannot be
-written, logged and dropped.
+A failed insert never stops capture. The reading is retried with backoff and, if it still cannot be
+written, it is logged and dropped.
 
 ### ToDo
 Change data to use entity migrations and support all compatible databases.

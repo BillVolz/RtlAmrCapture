@@ -13,11 +13,14 @@ namespace RtlAmrCapture.Services
     {
         private readonly IOptions<ServiceConfiguration> _options;
         private readonly ILogger<RunAndCaptureStdout> _logger;
+        private readonly ChildProcessTracker _childProcessTracker;
 
-        public RunAndCaptureStdout(IOptions<ServiceConfiguration> options, ILogger<RunAndCaptureStdout> logger)
+        public RunAndCaptureStdout(IOptions<ServiceConfiguration> options, ILogger<RunAndCaptureStdout> logger,
+            ChildProcessTracker childProcessTracker)
         {
             _options = options;
             _logger = logger;
+            _childProcessTracker = childProcessTracker;
         }
 
         public async Task<int> CaptureApp(Func<string, CancellationToken, Task> lineCapture, CancellationToken cancellationToken)
@@ -40,11 +43,50 @@ namespace RtlAmrCapture.Services
                 _ = InvokeSafely(lineCapture, args.Data, cancellationToken);
             };
             process.Start();
+
+            // Tie rtlamr.exe's lifetime to ours at the OS level: if this process ends for any
+            // reason, Windows kills rtlamr.exe too. See ChildProcessTracker for why this exists.
+            _childProcessTracker.AddProcess(process.Handle);
+
             process.BeginOutputReadLine();
-            await process.WaitForExitAsync(cancellationToken);
+
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // WaitForExitAsync(CancellationToken) does not kill the process when the token
+                // is cancelled, it only stops awaiting it. Without this, rtlamr.exe would be left
+                // running -- orphaned, but still holding its connection to rtl_tcp open -- and
+                // the caller's next attempt would end up competing with it rather than replacing
+                // it. Kill it (and anything it spawned) before the cancellation propagates.
+                //
+                // ChildProcessTracker is a backstop for exits this code never gets to run for
+                // (a crash, Environment.Exit); this is the immediate path for the common case,
+                // the hang watchdog in Worker.WatchingAndRecoverTask cancelling a stalled run.
+                TryKillProcessTree(process);
+                throw;
+            }
+
             if (process.ExitCode != 0)
                 throw (new Exception($"Processed closed Code: {process.ExitCode} {await process.StandardError.ReadToEndAsync()}"));
             return process.ExitCode;
+        }
+
+        private void TryKillProcessTree(Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to kill {ProcessName} (pid {Pid}) after cancellation. " +
+                    "It may be left running; ChildProcessTracker will still clean it up if this " +
+                    "service process ends.", process.ProcessName, process.Id);
+            }
         }
 
         /// <summary>

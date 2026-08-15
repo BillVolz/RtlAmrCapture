@@ -50,6 +50,29 @@ A few things to know about the newer builds:
 - The new build bundles `msvcr100.dll` and `pthreadVC2.dll`, so no separate Visual C++ Redistributable
   install is needed for rtl_tcp itself.
 
+### Orphaned rtlamr.exe processes after a restart
+
+Older versions had a bug where a restarted capture attempt could leave the previous rtlamr.exe
+process running in the background instead of replacing it. This happened whenever the listener
+was cancelled rather than exiting on its own: the hang watchdog (`HangDetectionMinutes`)
+cancelling a stalled run, or the service process itself ending abruptly (a crash, or
+`Environment.Exit`). `Process.WaitForExitAsync(CancellationToken)` does not kill the process on
+cancellation, it only stops waiting for it, so the old rtlamr.exe kept running and kept its
+connection to rtl_tcp open.
+
+This mattered because rtl_tcp fans the same sample stream out to every connected client. Each
+orphan left over from a failed run competed with the next run's rtlamr.exe for a usable
+connection, which could itself starve the new run of data and trigger another restart, leaving
+yet another orphan behind. Over time this could produce several zombie rtlamr.exe processes all
+connected at once, which is generally what it looks like when the service seems to be crashing
+and restarting for no reason even though rtl_tcp itself is fine.
+
+This is fixed as of the version that added `ChildProcessTracker`: rtlamr.exe is now killed
+explicitly whenever a capture attempt is cancelled, and is also added to a Windows Job Object so
+that it is terminated automatically if the service process ends for any other reason. If you are
+running an older build and see the service restarting frequently while rtl_tcp stays up, check
+for multiple rtlamr.exe processes in Task Manager and end the extras, or update.
+
 ### Configuration
 
 All settings live under `ServiceConfiguration` in `appsettings.json`.

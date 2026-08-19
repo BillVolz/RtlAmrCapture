@@ -4,7 +4,7 @@ A windows service that can capture readings from "smart meters" and log them to 
 
 ### Requirements
 
-- [rtl_tcp](https://github.com/rtlsdrblog/rtl-sdr-blog/releases) (rtl-sdr-blog build, V1.3.2 or later) to tune and read the rtl-sdr dongle. See the note below on Windows crashes with older builds.
+- [rtl_tcp](https://github.com/rtlsdrblog/rtl-sdr-blog/releases) (rtl-sdr-blog build, V1.3.2 or later) to tune and read the rtl-sdr dongle.
 - [rtlamr](https://github.com/bemasher/rtlamr) to decode the SCM+ messages from the feed.
 - GoLang >=1.11 (Go build environment setup guide: http://golang.org/doc/code.html) to build rtlamr.
 - [.NET 6 Runtime](https://dotnet.microsoft.com/download/dotnet/6.0), or the SDK if building from source.
@@ -26,52 +26,30 @@ A windows service that can capture readings from "smart meters" and log them to 
 
 To test, run rtlamr at the command line using msgtype all, to make sure your able to capture messages.
 
-### rtl_tcp crashes on Windows when a client connects
+### Grafana dashboard
 
-Builds of rtl_tcp from before August 2023 crash with an access violation in ntdll.dll as soon as
-a client (rtlamr, in this case) connects to it. rtl_tcp accepts the connection and appears to be
-running, but dies within a second or two of the first client attaching, which then causes
-RtlAmrCapture to fail its connection and restart repeatedly.
+A ready-made dashboard lives in `grafana/water-consumption-dashboard.json`: daily use, a
+neighborhood comparison, usage by time of day, and at-a-glance totals.
 
-This was fixed upstream in [rtl-sdr-blog V1.3.2](https://github.com/rtlsdrblog/rtl-sdr-blog/releases/tag/V1.3.2)
-("Fixed rtl_tcp on Windows"). If your rtl_tcp folder predates August 2023, or you are unsure,
-download the [latest release](https://github.com/rtlsdrblog/rtl-sdr-blog/releases/latest) and
-replace rtl_tcp.exe and its supporting DLLs.
+1. Run `sql/RtlamrClean.sql` against your database. This creates the `RtlamrClean` view the
+   dashboard reads, and an optional `Homes` table for naming meters.
+2. In Grafana, **Dashboards -> Import -> Upload JSON file**, then pick your SQL Server datasource.
+3. Choose your meter from the **Meter** dropdown at the top.
 
-A few things to know about the newer builds:
+Set **Baseline offset** to your meter's reading when you started capturing, so the running-total
+chart starts near zero instead of at the lifetime meter value.
 
-- The core DLL is renamed from `librtlsdr.dll` to `rtlsdr.dll`. Copy the whole release rather than
-  overwriting individual files, so nothing is left pointing at the old name.
-- `libusb-1.0.dll` and `libwinpthread-1.dll` are no longer required. libusb support is compiled
-  directly into `rtlsdr.dll`; you can leave the old DLLs in place, they are simply unused.
-- `rtlsdr.dll` also references `UsbDkHelper.dll`, an alternate USB backend. This is only loaded if
-  you are actually using UsbDk, so a normal WinUSB/Zadig-driven dongle setup runs fine without that
-  DLL present.
-- The new build bundles `msvcr100.dll` and `pthreadVC2.dll`, so no separate Visual C++ Redistributable
-  install is needed for rtl_tcp itself.
+### Troubleshooting
 
-### Orphaned rtlamr.exe processes after a restart
+**The service restarts every minute and rtl_tcp keeps dying.** rtl_tcp builds from before
+August 2023 crash with an access violation as soon as a client connects. This was fixed upstream
+in [rtl-sdr-blog V1.3.2](https://github.com/rtlsdrblog/rtl-sdr-blog/releases). Update to the
+[latest release](https://github.com/rtlsdrblog/rtl-sdr-blog/releases/latest) and copy the whole
+release, since the core DLL was renamed from `librtlsdr.dll` to `rtlsdr.dll`.
 
-Older versions had a bug where a restarted capture attempt could leave the previous rtlamr.exe
-process running in the background instead of replacing it. This happened whenever the listener
-was cancelled rather than exiting on its own: the hang watchdog (`HangDetectionMinutes`)
-cancelling a stalled run, or the service process itself ending abruptly (a crash, or
-`Environment.Exit`). `Process.WaitForExitAsync(CancellationToken)` does not kill the process on
-cancellation, it only stops waiting for it, so the old rtlamr.exe kept running and kept its
-connection to rtl_tcp open.
-
-This mattered because rtl_tcp fans the same sample stream out to every connected client. Each
-orphan left over from a failed run competed with the next run's rtlamr.exe for a usable
-connection, which could itself starve the new run of data and trigger another restart, leaving
-yet another orphan behind. Over time this could produce several zombie rtlamr.exe processes all
-connected at once, which is generally what it looks like when the service seems to be crashing
-and restarting for no reason even though rtl_tcp itself is fine.
-
-This is fixed as of the version that added `ChildProcessTracker`: rtlamr.exe is now killed
-explicitly whenever a capture attempt is cancelled, and is also added to a Windows Job Object so
-that it is terminated automatically if the service process ends for any other reason. If you are
-running an older build and see the service restarting frequently while rtl_tcp stays up, check
-for multiple rtlamr.exe processes in Task Manager and end the extras, or update.
+**Readings occasionally spike to a huge value, then return to normal.** RF bit errors can flip a
+high-order bit of the consumption field, adding a power of two to an otherwise valid reading. See
+`sql/RtlamrClean.sql` for a view that filters these out.
 
 ### Configuration
 

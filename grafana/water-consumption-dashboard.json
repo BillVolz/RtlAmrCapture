@@ -527,18 +527,18 @@
       {
         "current": {},
         "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
-        "definition": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY 1",
+        "definition": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId, COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT CAST([Timestamp] AS DATE)), 0) AS PerDay FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY CASE WHEN h.[Name] IS NULL THEN 1 ELSE 0 END, c.PerDay DESC",
         "hide": 0,
         "includeAll": false,
         "label": "Meter",
         "multi": false,
         "name": "meter",
         "options": [],
-        "query": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY 1",
+        "query": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId, COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT CAST([Timestamp] AS DATE)), 0) AS PerDay FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY CASE WHEN h.[Name] IS NULL THEN 1 ELSE 0 END, c.PerDay DESC",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 1,
+        "sort": 0,
         "type": "query"
       },
       {

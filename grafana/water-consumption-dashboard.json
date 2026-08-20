@@ -13,6 +13,7 @@
     { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.4.0" },
     { "type": "datasource", "id": "mssql", "name": "Microsoft SQL Server", "version": "1.0.0" },
     { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
+    { "type": "panel", "id": "bargauge", "name": "Bar gauge", "version": "" },
     { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
     { "type": "panel", "id": "table", "name": "Table", "version": "" },
     { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" }
@@ -477,6 +478,44 @@
       ],
       "title": "Neighborhood Comparison",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Packets successfully received per meter, per day. rtlamr does not report RSSI, but SCM+ meters transmit on a fixed interval, so reception count is a direct proxy for signal strength. A meter you hear 2000 times a day has a far stronger link than one you hear 20 times.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "decimals": 0,
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 31 },
+      "id": 16,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS [Meter],\n    CAST(COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT CAST(c.[Timestamp] AS DATE)), 0) AS DECIMAL(10,0)) AS [Packets/Day]\nFROM dbo.RtlamrClean c\nLEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId\nWHERE $__timeFilter(c.[Timestamp])\nGROUP BY COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar))\nORDER BY [Packets/Day] DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Signal Strength (packets received per day)",
+      "type": "bargauge"
     }
   ],
   "refresh": "1m",
@@ -488,15 +527,15 @@
       {
         "current": {},
         "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
-        "definition": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT DISTINCT EndpointId FROM dbo.RtlamrClean) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY 1",
+        "definition": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY 1",
         "hide": 0,
         "includeAll": false,
         "label": "Meter",
         "multi": false,
         "name": "meter",
         "options": [],
-        "query": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT DISTINCT EndpointId FROM dbo.RtlamrClean) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY 1",
-        "refresh": 1,
+        "query": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY 1",
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,

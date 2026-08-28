@@ -75,14 +75,89 @@ namespace RtlAmrCapture.Sql
                     continue;
                 }
 
-                await using var c = new SqlConnection(connectionString);
-                await c.OpenAsync(cancellationToken);
-                await using var cmd = c.CreateCommand();
-                cmd.CommandText = InsertSql;
-                cmd.Parameters.AddRange(GetParameters(rad, cmd).ToArray());
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
+                await InsertWithRetry(connectionString, conn.ConnectionStringName, rad, cancellationToken);
             }
 
+        }
+
+        /// <summary>
+        /// Inserts a single reading, retrying transient failures with exponential backoff.
+        /// A reading that still cannot be written is logged and dropped -- losing one meter
+        /// sample is always preferable to failing the capture pipeline.
+        /// </summary>
+        private async Task InsertWithRetry(string connectionString, string connectionStringName,
+            RtlAmrData rad, CancellationToken cancellationToken)
+        {
+            var attempts = Math.Max(1, _serviceConfiguration.SqlRetryCount);
+            var baseDelay = Math.Max(0, _serviceConfiguration.SqlRetryBaseDelayMs);
+
+            for (var attempt = 1; attempt <= attempts; attempt++)
+            {
+                // Shutting down, or the watchdog cancelled the listener. Stop cleanly rather
+                // than burning through retries against a token that will never be reset.
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogDebug("Insert abandoned for {connectionStringName}; cancellation requested.",
+                        connectionStringName);
+                    return;
+                }
+
+                try
+                {
+                    await using var c = new SqlConnection(connectionString);
+                    await c.OpenAsync(cancellationToken);
+                    await using var cmd = c.CreateCommand();
+                    cmd.CommandText = InsertSql;
+                    // SqlCommand.CommandTimeout throws on a negative value, and 0 means "wait
+                    // forever" -- a bad outcome for a capture pipeline that should drop a reading
+                    // rather than stall. Fall back to the documented default instead of trusting
+                    // a misconfigured value.
+                    cmd.CommandTimeout = _serviceConfiguration.SqlCommandTimeoutSeconds > 0
+                        ? _serviceConfiguration.SqlCommandTimeoutSeconds
+                        : DefaultCommandTimeoutSeconds;
+                    cmd.Parameters.AddRange(GetParameters(rad, cmd).ToArray());
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                    return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Cancellation came from us (service stopping, or the hang watchdog firing).
+                    // Expected control flow, not a failure worth retrying or escalating.
+                    _logger.LogDebug("Insert cancelled for {connectionStringName}.", connectionStringName);
+                    return;
+                }
+                catch (Exception ex) when (attempt < attempts)
+                {
+                    // Integer math, capped. The previous form multiplied an int by
+                    // (int)Math.Pow(2, n), which overflows to a negative value once n reaches 31
+                    // and makes Task.Delay throw. Reachable only via an absurd SqlRetryCount, but
+                    // cheap to make impossible.
+                    var exponent = Math.Min(attempt - 1, 30);
+                    var delay = (int)Math.Min(MaxRetryDelayMs, (long)baseDelay * (1L << exponent));
+                    _logger.LogWarning(ex,
+                        "Insert attempt {attempt}/{attempts} failed for {connectionStringName}. Retrying in {delay}ms.",
+                        attempt, attempts, connectionStringName, delay);
+
+                    try
+                    {
+                        await Task.Delay(delay, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Final attempt failed. Drop the reading rather than propagating -- see
+                    // the comment in Worker.LineCapture for why an escaping exception here
+                    // used to terminate the whole process.
+                    _logger.LogError(ex,
+                        "Insert failed after {attempts} attempts for {connectionStringName}. Dropping reading for endpoint {endpointId}.",
+                        attempts, connectionStringName, rad.Message?.EndpointID);
+                    return;
+                }
+            }
         }
 
         private List<SqlParameter> GetParameters(RtlAmrData rad, SqlCommand command)
@@ -98,6 +173,12 @@ namespace RtlAmrCapture.Sql
 
             return pars;
         }
+
+        /// <summary>Used when SqlCommandTimeoutSeconds is configured to a non-positive value.</summary>
+        private const int DefaultCommandTimeoutSeconds = 30;
+
+        /// <summary>Upper bound on a single retry backoff, so a large SqlRetryCount cannot stall the pipeline.</summary>
+        private const int MaxRetryDelayMs = 30_000;
 
         private const string InsertSql =
             @"Insert into RtlamrRaw([Timestamp],Type,ProtocolId,EndpointType,EndpointId,Consumption) 

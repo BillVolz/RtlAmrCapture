@@ -1,0 +1,563 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_MSSQL",
+      "label": "SQL Server",
+      "description": "The SQL Server datasource holding your RtlamrRaw table",
+      "type": "datasource",
+      "pluginId": "mssql",
+      "pluginName": "Microsoft SQL Server"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.4.0" },
+    { "type": "datasource", "id": "mssql", "name": "Microsoft SQL Server", "version": "1.0.0" },
+    { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
+    { "type": "panel", "id": "bargauge", "name": "Bar gauge", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Water usage from smart meter readings captured by RtlAmrCapture. Reads dbo.RtlamrClean, so run sql/RtlamrClean.sql before importing.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Latest meter reading, less the baseline offset.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "blue", "mode": "fixed" },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue" }] },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT TOP 1 Consumption - $baseline AS value\nFROM dbo.RtlamrClean\nWHERE EndpointId = $meter\nORDER BY [Timestamp] DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Meter Reading",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Gallons used since midnight.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "#EAB839", "value": 60 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ISNULL(MAX(Consumption) - MIN(Consumption), 0) AS value\nFROM dbo.RtlamrClean\nWHERE EndpointId = $meter\n  AND CAST([Timestamp] AS DATE) = CAST(SYSDATETIMEOFFSET() AS DATE);",
+          "refId": "A"
+        }
+      ],
+      "title": "Today So Far",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Total gallons used yesterday.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "#EAB839", "value": 60 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ISNULL(MAX(Consumption) - MIN(Consumption), 0) AS value\nFROM dbo.RtlamrClean\nWHERE EndpointId = $meter\n  AND CAST([Timestamp] AS DATE) = CAST(DATEADD(DAY, -1, SYSDATETIMEOFFSET()) AS DATE);",
+          "refId": "A"
+        }
+      ],
+      "title": "Yesterday",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Average gallons per day over the last 7 days, from day-over-day meter deltas.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "#EAB839", "value": 60 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CAST(AVG(CAST(Change AS FLOAT)) AS DECIMAL(10,1)) AS value\nFROM (\n    SELECT MAX(Consumption) - LAG(MAX(Consumption)) OVER (ORDER BY CAST([Timestamp] AS DATE)) AS Change\n    FROM dbo.RtlamrClean\n    WHERE EndpointId = $meter\n      AND [Timestamp] > DATEADD(DAY, -8, SYSDATETIMEOFFSET())\n    GROUP BY CAST([Timestamp] AS DATE)\n) x\nWHERE Change IS NOT NULL;",
+          "refId": "A"
+        }
+      ],
+      "title": "7-Day Average",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Daily water use from day-over-day meter deltas.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Gallons",
+            "axisPlacement": "auto",
+            "fillOpacity": 85,
+            "gradientMode": "hue",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineWidth": 0,
+            "scaleDistribution": { "type": "linear" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "#EAB839", "value": 60 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 4 },
+      "id": 3,
+      "options": {
+        "barRadius": 0.15,
+        "barWidth": 0.8,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": { "mode": "single", "sort": "none" },
+        "xTickLabelRotation": -45,
+        "xTickLabelSpacing": 0
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    CAST([Timestamp] AS DATE) AS [Time],\n    MAX(Consumption) - LAG(MAX(Consumption)) OVER (ORDER BY CAST([Timestamp] AS DATE)) AS [Gallons]\nFROM dbo.RtlamrClean\nWHERE EndpointId = $meter\n  AND $__timeFilter([Timestamp])\nGROUP BY CAST([Timestamp] AS DATE)\nORDER BY [Time];",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily Water Use",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Average daily use for every meter in radio range. Populate dbo.Homes to replace endpoint IDs with names.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text" }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Avg Gal/Day" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "mode": "gradient", "type": "gauge" } },
+              { "id": "unit", "value": "gallons" },
+              { "id": "decimals", "value": 1 },
+              { "id": "min", "value": 0 },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green" },
+                    { "color": "#EAB839", "value": 20 },
+                    { "color": "red", "value": 30 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Peak Day" },
+            "properties": [
+              { "id": "unit", "value": "gallons" },
+              { "id": "custom.width", "value": 90 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 4 },
+      "id": 14,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "Avg Gal/Day" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS [Home],\n    CAST(AVG(CAST(c.daily AS FLOAT)) AS DECIMAL(10,1)) AS [Avg Gal/Day],\n    MAX(c.daily) AS [Peak Day]\nFROM (\n    SELECT EndpointId,\n           CAST([Timestamp] AS DATE) AS d,\n           MAX(Consumption) - MIN(Consumption) AS daily\n    FROM dbo.RtlamrClean\n    WHERE $__timeFilter([Timestamp])\n    GROUP BY EndpointId, CAST([Timestamp] AS DATE)\n) c\nLEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId\nGROUP BY COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar))\nORDER BY [Avg Gal/Day] DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Neighborhood Ranking",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Cumulative meter reading over time. A steady climb is normal; a flat line means no water use.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "semi-dark-blue", "mode": "fixed" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Gallons",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 25,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    DATEADD(HOUR, DATEDIFF(HOUR, 0, [Timestamp]), 0) AS [Timestamp],\n    MAX(Consumption) - $baseline AS Gallons\nFROM dbo.RtlamrClean\nWHERE EndpointId = $meter\n  AND $__timeFilter([Timestamp])\nGROUP BY DATEADD(HOUR, DATEDIFF(HOUR, 0, [Timestamp]), 0)\nORDER BY [Timestamp];",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Water Consumption",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Average gallons used in each 2-hour block. Measures the change between consecutive readings and credits it to the block observed, so usage spanning a boundary is not lost. Gaps over 60 minutes are skipped so a catch-up reading after an outage is not blamed on one block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-BlPu" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Avg Gallons",
+            "axisPlacement": "auto",
+            "fillOpacity": 90,
+            "gradientMode": "hue",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineWidth": 0,
+            "scaleDistribution": { "type": "linear" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "id": 15,
+      "options": {
+        "barRadius": 0.15,
+        "barWidth": 0.85,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "orientation": "auto",
+        "showValue": "never",
+        "stacking": "none",
+        "tooltip": { "mode": "single", "sort": "none" },
+        "xField": "Time",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- 2-hour blocks keep the axis readable on a phone. For full 24-hour\n-- resolution, change (DATEPART(HOUR,[Timestamp]) / 2) * 2 to\n-- DATEPART(HOUR,[Timestamp]) and drop the 'a'/'p' label CASE.\nWITH r AS (\n    SELECT [Timestamp],\n           Consumption,\n           LAG(Consumption) OVER (ORDER BY [Timestamp]) AS PrevC,\n           LAG([Timestamp])  OVER (ORDER BY [Timestamp]) AS PrevT\n    FROM dbo.RtlamrClean\n    WHERE EndpointId = $meter\n      AND $__timeFilter([Timestamp])\n),\nd AS (\n    SELECT (DATEPART(HOUR, [Timestamp]) / 2) * 2 AS Blk,\n           Consumption - PrevC AS Delta,\n           CAST([Timestamp] AS DATE) AS Day\n    FROM r\n    WHERE PrevC IS NOT NULL\n      AND Consumption >= PrevC\n      AND DATEDIFF(MINUTE, PrevT, [Timestamp]) <= 60\n)\nSELECT\n    CASE WHEN Blk = 0  THEN '12a'\n         WHEN Blk < 12 THEN CAST(Blk AS varchar) + 'a'\n         WHEN Blk = 12 THEN '12p'\n         ELSE CAST(Blk - 12 AS varchar) + 'p' END AS [Time],\n    CAST(SUM(Delta) * 1.0 / NULLIF(COUNT(DISTINCT Day), 0) AS DECIMAL(6,2)) AS [Avg Gallons]\nFROM d\nGROUP BY Blk\nORDER BY Blk;",
+          "refId": "A"
+        }
+      ],
+      "title": "Usage by Time of Day",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Daily use for every meter in radio range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Gallons / Day",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "gallons"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 22 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    CAST(s.[Day] AS DATETIME) AS \"time\",\n    COALESCE(h.[Name], 'Meter ' + CAST(s.EndpointId AS varchar)) AS metric,\n    s.Change AS count\nFROM (\n    SELECT EndpointId,\n           [Day],\n           Consumption - LAG(Consumption) OVER (PARTITION BY EndpointId ORDER BY [Day]) AS Change\n    FROM (\n        SELECT EndpointId,\n               CAST([Timestamp] AS DATE) AS [Day],\n               MAX(Consumption) AS Consumption\n        FROM dbo.RtlamrClean\n        WHERE $__timeFilter([Timestamp])\n        GROUP BY EndpointId, CAST([Timestamp] AS DATE)\n    ) AS m\n) AS s\nLEFT JOIN dbo.Homes AS h ON h.RtlamrEndpointId = s.EndpointId\nWHERE s.Change IS NOT NULL\nORDER BY s.[Day];",
+          "refId": "A"
+        }
+      ],
+      "title": "Neighborhood Comparison",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Packets successfully received per meter, per day. rtlamr does not report RSSI, but SCM+ meters transmit on a fixed interval, so reception count is a direct proxy for signal strength. A meter you hear 2000 times a day has a far stronger link than one you hear 20 times.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "decimals": 0,
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 31 },
+      "id": 16,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS [Meter],\n    CAST(COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT CAST(c.[Timestamp] AS DATE)), 0) AS DECIMAL(10,0)) AS [Packets/Day]\nFROM dbo.RtlamrClean c\nLEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId\nWHERE $__timeFilter(c.[Timestamp])\nGROUP BY COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar))\nORDER BY [Packets/Day] DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Signal Strength (packets received per day)",
+      "type": "bargauge"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["water", "rtlamr", "utilities"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+        "definition": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId, COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT CAST([Timestamp] AS DATE)), 0) AS PerDay FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY CASE WHEN h.[Name] IS NULL THEN 1 ELSE 0 END, c.PerDay DESC",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Meter",
+        "multi": false,
+        "name": "meter",
+        "options": [],
+        "query": "SELECT COALESCE(h.[Name], 'Meter ' + CAST(c.EndpointId AS varchar)) AS __text, c.EndpointId AS __value FROM (SELECT EndpointId, COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT CAST([Timestamp] AS DATE)), 0) AS PerDay FROM dbo.RtlamrClean WHERE $__timeFilter([Timestamp]) GROUP BY EndpointId HAVING COUNT(DISTINCT CAST([Timestamp] AS DATE)) >= 2) c LEFT JOIN dbo.Homes h ON h.RtlamrEndpointId = c.EndpointId ORDER BY CASE WHEN h.[Name] IS NULL THEN 1 ELSE 0 END, c.PerDay DESC",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": { "selected": false, "text": "0", "value": "0" },
+        "description": "Subtracted from the raw reading so the chart starts near zero. Set it to your meter's reading when you began capturing, or leave at 0 for the raw total.",
+        "hide": 0,
+        "label": "Baseline offset",
+        "name": "baseline",
+        "options": [{ "selected": true, "text": "0", "value": "0" }],
+        "query": "0",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": { "from": "now-30d", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Water Consumption",
+  "uid": null,
+  "weekStart": ""
+}

@@ -8,13 +8,13 @@ A windows service that can capture readings from "smart meters" and log them to 
 - [rtlamr](https://github.com/bemasher/rtlamr) to decode the SCM+ messages from the feed.
 - GoLang >=1.11 (Go build environment setup guide: http://golang.org/doc/code.html) to build rtlamr.
 - [.NET 6 Runtime](https://dotnet.microsoft.com/download/dotnet/6.0), or the SDK if building from source.
-- SQL Server (Developer / Express / Community Edition).
+- SQL Server (Developer or Express Edition).
 
 ### Usage
 - Install [rtl_tcp] on a machine running the sdr-dongle. This can be installed on its own device if you configure it to allow remote connections.
 - Install GO
 - Install the latest rtlamr using GO
-- Install MSSQL (Developer / Community Edition) and create a new database. The `RtlamrRaw` table and its index are created automatically on first start, so you only need to create the database itself.
+- Install MSSQL (Developer or Express Edition) and create a new database. The `RtlamrRaw` table and its index are created automatically on first start, so you only need to create the database itself.
 - Install RtlAmr-Capture as a windows service using `sc.exe`:
 
   ```

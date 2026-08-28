@@ -108,7 +108,13 @@ namespace RtlAmrCapture.Sql
                     await c.OpenAsync(cancellationToken);
                     await using var cmd = c.CreateCommand();
                     cmd.CommandText = InsertSql;
-                    cmd.CommandTimeout = _serviceConfiguration.SqlCommandTimeoutSeconds;
+                    // SqlCommand.CommandTimeout throws on a negative value, and 0 means "wait
+                    // forever" -- a bad outcome for a capture pipeline that should drop a reading
+                    // rather than stall. Fall back to the documented default instead of trusting
+                    // a misconfigured value.
+                    cmd.CommandTimeout = _serviceConfiguration.SqlCommandTimeoutSeconds > 0
+                        ? _serviceConfiguration.SqlCommandTimeoutSeconds
+                        : DefaultCommandTimeoutSeconds;
                     cmd.Parameters.AddRange(GetParameters(rad, cmd).ToArray());
                     await cmd.ExecuteNonQueryAsync(cancellationToken);
                     return;
@@ -122,7 +128,12 @@ namespace RtlAmrCapture.Sql
                 }
                 catch (Exception ex) when (attempt < attempts)
                 {
-                    var delay = baseDelay * (int)Math.Pow(2, attempt - 1);
+                    // Integer math, capped. The previous form multiplied an int by
+                    // (int)Math.Pow(2, n), which overflows to a negative value once n reaches 31
+                    // and makes Task.Delay throw. Reachable only via an absurd SqlRetryCount, but
+                    // cheap to make impossible.
+                    var exponent = Math.Min(attempt - 1, 30);
+                    var delay = (int)Math.Min(MaxRetryDelayMs, (long)baseDelay * (1L << exponent));
                     _logger.LogWarning(ex,
                         "Insert attempt {attempt}/{attempts} failed for {connectionStringName}. Retrying in {delay}ms.",
                         attempt, attempts, connectionStringName, delay);
@@ -162,6 +173,12 @@ namespace RtlAmrCapture.Sql
 
             return pars;
         }
+
+        /// <summary>Used when SqlCommandTimeoutSeconds is configured to a non-positive value.</summary>
+        private const int DefaultCommandTimeoutSeconds = 30;
+
+        /// <summary>Upper bound on a single retry backoff, so a large SqlRetryCount cannot stall the pipeline.</summary>
+        private const int MaxRetryDelayMs = 30_000;
 
         private const string InsertSql =
             @"Insert into RtlamrRaw([Timestamp],Type,ProtocolId,EndpointType,EndpointId,Consumption) 

@@ -83,10 +83,22 @@ namespace RtlAmrCapture
                 {
                     await _runAndCaptureStdout.CaptureApp(LineCapture, _listeningTaskCancellationToken.Token);
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
                     // If we cancel because of a hang, we will create a new source.
                     // If the service is ending it will not get past the loop to use this.
+                    //
+                    // Catches OperationCanceledException rather than TaskCanceledException
+                    // (which derives from it) because the concrete type depends on when the
+                    // token was cancelled. Process.WaitForExitAsync throws TaskCanceledException
+                    // when cancelled mid-await, but a plain OperationCanceledException when the
+                    // token was already cancelled before the call. That second case is reachable:
+                    // the generic handler below does not replace the token source, so a failed
+                    // run followed by the watchdog firing leaves the next iteration starting with
+                    // an already-cancelled token. Catching only TaskCanceledException let that
+                    // fall through to the handler below, where the watchdog had just set
+                    // _lastSample to MinValue, guaranteeing Environment.Exit(1) -- the hang
+                    // recovery would kill the service instead of restarting the listener.
                     _listeningTaskCancellationToken = new CancellationTokenSource();
                 }
                 catch (Exception ex)

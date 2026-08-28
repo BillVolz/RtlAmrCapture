@@ -60,15 +60,20 @@ namespace RtlAmrCapture.Services
         /// Adds a process to the job so Windows kills it if this process ends for any reason.
         /// Safe to call even if the process has already exited.
         /// </summary>
-        public void AddProcess(IntPtr processHandle)
+        /// <returns>
+        /// true if the process joined the job. false means the OS-level guarantee does not apply
+        /// to this process; the caller should log it, including Marshal.GetLastWin32Error().
+        /// </returns>
+        public bool AddProcess(IntPtr processHandle)
         {
             // A process can only belong to one job object on Windows versions before the
             // nested-jobs support added in 1607 (mid-2016), so this can fail if rtlamr.exe was
             // itself launched inside another job (for example under a debugger, or under some
             // CI/orchestration wrappers). That is not fatal here: the explicit process.Kill()
             // call in RunAndCaptureStdout's cancellation path still applies, this is a second
-            // layer, not the only one.
-            AssignProcessToJobObject(_jobHandle, processHandle);
+            // layer, not the only one. It is still worth surfacing, because a silent failure
+            // removes the only protection against orphans on an abrupt exit.
+            return AssignProcessToJobObject(_jobHandle, processHandle);
         }
 
         public void Dispose()

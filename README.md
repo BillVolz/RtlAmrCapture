@@ -47,6 +47,11 @@ in [rtl-sdr-blog V1.3.2](https://github.com/rtlsdrblog/rtl-sdr-blog/releases). U
 [latest release](https://github.com/rtlsdrblog/rtl-sdr-blog/releases/latest) and copy the whole
 release, since the core DLL was renamed from `librtlsdr.dll` to `rtlsdr.dll`.
 
+**The service starts and stops every minute, and the log shows `Error connecting to spectrum
+server`.** rtl_tcp is not listening. Run it by hand to see why: `No supported devices found`
+means the SDR dongle is not attached, or is no longer bound to the WinUSB driver. Capture backs
+off and retries on its own, so it recovers once rtl_tcp is running again.
+
 **Readings occasionally spike to a huge value, then return to normal.** RF bit errors can flip a
 high-order bit of the consumption field, adding a power of two to an otherwise valid reading. See
 `sql/RtlamrClean.sql` for a view that filters these out.
@@ -64,6 +69,9 @@ All settings live under `ServiceConfiguration` in `appsettings.json`.
 | `SqlCommandTimeoutSeconds` | 30 | Timeout for each SQL command. Raise it if the database is on slow or contended storage. |
 | `SqlRetryCount` | 3 | Attempts per insert before the reading is logged and dropped. |
 | `SqlRetryBaseDelayMs` | 200 | Base retry backoff, doubling per attempt (200ms, 400ms, 800ms). |
+| `StartupFailuresBeforeExit` | 10 | Consecutive failed capture attempts before the service exits, when no reading has ever arrived. `0` retries forever instead of exiting. |
+| `RestartBackoffBaseMs` | 1000 | Base delay between capture restarts, doubling per consecutive failure. Resets once a reading arrives. |
+| `RestartBackoffMaxMs` | 60000 | Upper bound on the restart backoff. |
 | `Connections` | (required) | One entry per destination database, each naming a key in `ConnectionStrings`. |
 
 Connection strings themselves go in the standard `ConnectionStrings` section, keyed by the

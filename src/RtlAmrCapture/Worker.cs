@@ -9,6 +9,7 @@ namespace RtlAmrCapture
     public class Worker : BackgroundService
     {
         private int _restartCount = 0;
+        private int _consecutiveFailures = 0;
         private DateTimeOffset _lastSample = DateTimeOffset.MinValue;
         private readonly ILogger<Worker> _logger;
         private readonly CaptureService _captureService;
@@ -82,6 +83,7 @@ namespace RtlAmrCapture
                 try
                 {
                     await _runAndCaptureStdout.CaptureApp(LineCapture, _listeningTaskCancellationToken.Token);
+                    _consecutiveFailures = 0;
                 }
                 catch (OperationCanceledException)
                 {
@@ -103,15 +105,38 @@ namespace RtlAmrCapture
                 }
                 catch (Exception ex)
                 {
+                    _consecutiveFailures++;
                     _logger.LogError(ex, "{Message}", ex.Message);
-                    //First time running, we exit the service if it fails.
-                    //Look at logs to trouble shoot.
-                    if (_lastSample == DateTimeOffset.MinValue)
+
+                    // Give up only once the failures look permanent rather than transient.
+                    //
+                    // This used to call Environment.Exit(1) on the *first* failure whenever no
+                    // reading had ever been captured, on the reasoning that a bad configuration
+                    // should fail loudly. But the same condition is hit whenever an upstream
+                    // dependency is simply not up yet: rtl_tcp not listening, or the SDR dongle
+                    // unplugged. That turned a recoverable outage into an endless crash loop --
+                    // the process died about a second after each start and the service manager
+                    // restarted it a minute later, indefinitely. Seen in practice at 148 restarts
+                    // in under three hours, every one of them also raising an alert.
+                    //
+                    // Retrying with backoff costs nothing when the configuration really is broken:
+                    // the service still exits for the service manager to restart it, just after a
+                    // bounded number of attempts rather than immediately. When the dependency is
+                    // merely down, capture now resumes on its own once it returns.
+                    var failuresBeforeExit = _serviceConfiguration.Value.StartupFailuresBeforeExit;
+                    if (_lastSample == DateTimeOffset.MinValue
+                        && failuresBeforeExit > 0
+                        && _consecutiveFailures >= failuresBeforeExit)
+                    {
+                        _logger.LogError(
+                            "Capture failed {failures} consecutive times without ever receiving a reading. Exiting so the service manager can restart us.",
+                            _consecutiveFailures);
                         Environment.Exit(1);
+                    }
                 }
                 _restartCount++;
-                //Pause before retrying.
-                await Task.Delay(1000, _windowsServiceCancellationToken);
+                //Pause before retrying, backing off while failures persist.
+                await Task.Delay(GetRestartDelayMs(), _windowsServiceCancellationToken);
             }
         }
 
@@ -176,10 +201,32 @@ namespace RtlAmrCapture
 
         
 
+        /// <summary>
+        /// Delay before the next capture attempt. Doubles per consecutive failure so a dependency
+        /// that is down -- rtl_tcp not listening, the dongle unplugged -- is retried patiently
+        /// rather than in a tight loop, and drops back to the base delay as soon as a reading
+        /// arrives.
+        /// </summary>
+        private int GetRestartDelayMs()
+        {
+            var baseDelay = Math.Max(0, _serviceConfiguration.Value.RestartBackoffBaseMs);
+            var maxDelay = Math.Max(baseDelay, _serviceConfiguration.Value.RestartBackoffMaxMs);
+
+            if (_consecutiveFailures <= 0)
+                return baseDelay;
+
+            // Capped integer math. An unclamped exponent overflows the shift to a negative delay
+            // once it reaches 31 and makes Task.Delay throw; same guard as in
+            // MsSqlDataRepo.InsertWithRetry.
+            var exponent = Math.Min(_consecutiveFailures - 1, 30);
+            return (int)Math.Min(maxDelay, (long)baseDelay * (1L << exponent));
+        }
+
         private void OnSuccessfulCapture()
         {
             //Restart the count since we had a successful capture.
             _restartCount = 0;
+            _consecutiveFailures = 0;
             _lastSample = DateTimeOffset.Now;
         }
     }

@@ -32,6 +32,26 @@ namespace RtlAmrCapture.Config
         /// Base delay for retry backoff. Doubles on each attempt (200ms, 400ms, 800ms...).
         /// </summary>
         public int SqlRetryBaseDelayMs { get; set; } = 200;
+
+        /// <summary>
+        /// Consecutive failed capture attempts tolerated before the service exits, when no reading
+        /// has ever been received. Exiting lets the service manager restart the process from clean
+        /// state; the retries in front of it stop a dependency that is merely slow to come up from
+        /// being treated as a fatal misconfiguration. Set to 0 to retry forever and never exit.
+        /// </summary>
+        public int StartupFailuresBeforeExit { get; set; } = 10;
+
+        /// <summary>
+        /// Base delay between capture restart attempts. Doubles per consecutive failure, up to
+        /// <see cref="RestartBackoffMaxMs"/>, and resets as soon as a reading arrives.
+        /// </summary>
+        public int RestartBackoffBaseMs { get; set; } = 1000;
+
+        /// <summary>
+        /// Upper bound on the restart backoff, so a long outage settles into a steady retry
+        /// interval instead of growing without limit.
+        /// </summary>
+        public int RestartBackoffMaxMs { get; set; } = 60_000;
     }
 
     public class DataBaseConnections

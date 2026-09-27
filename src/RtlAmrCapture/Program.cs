@@ -28,6 +28,9 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<RunAndCaptureStdout>();
         services.Configure<ServiceConfiguration>(context.Configuration.GetSection("ServiceConfiguration"));
         services.AddSingleton<MsSqlDataRepo>();
+        // Green Button folder import. Does nothing unless GreenButtonImports is configured.
+        services.AddHostedService<GreenButtonImportWorker>();
+        services.AddSingleton<UtilityUsageRepo>();
     })
     .Build();
 

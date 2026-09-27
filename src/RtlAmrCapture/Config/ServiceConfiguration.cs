@@ -52,6 +52,33 @@ namespace RtlAmrCapture.Config
         /// interval instead of growing without limit.
         /// </summary>
         public int RestartBackoffMaxMs { get; set; } = 60_000;
+
+        /// <summary>
+        /// Folders to watch for Green Button (ESPI XML) usage files downloaded from a utility.
+        /// Leave empty or omit to turn the importer off.
+        /// </summary>
+        public GreenButtonImport[]? GreenButtonImports { get; set; }
+
+        /// <summary>
+        /// How often to scan the Green Button folders for new files.
+        /// </summary>
+        public int GreenButtonScanIntervalSeconds { get; set; } = 60;
+    }
+
+    public class GreenButtonImport
+    {
+        /// <summary>
+        /// Label for this source, such as "PECO Home". Stored with every row and part of its
+        /// identity, so keep it stable once data has been imported: renaming it makes the next
+        /// import a separate series instead of updating the existing one.
+        /// </summary>
+        public string? Name { get; set; }
+
+        /// <summary>
+        /// Folder to drop .xml or .zip downloads into. Imported files move to a "processed"
+        /// subfolder; unreadable ones move to "failed".
+        /// </summary>
+        public string? WatchFolder { get; set; }
     }
 
     public class DataBaseConnections

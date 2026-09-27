@@ -1,0 +1,439 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_MSSQL",
+      "label": "SQL Server",
+      "description": "The SQL Server datasource holding your UtilityUsage table",
+      "type": "datasource",
+      "pluginId": "mssql",
+      "pluginName": "Microsoft SQL Server"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.4.0" },
+    { "type": "datasource", "id": "mssql", "name": "Microsoft SQL Server", "version": "1.0.0" },
+    { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Utility-reported usage imported from Green Button downloads by RtlAmrCapture. Reads dbo.UtilityUsageIntervals, which the service creates on first start.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Usage for the most recent full local day the utility has reported. Utilities usually publish interval data about a day late.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH d AS (\n  SELECT CAST(IntervalStart AT TIME ZONE '${tz}' AS date) AS LocalDay, [Value]\n  FROM dbo.UtilityUsageIntervals\n  WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n)\nSELECT TOP 1 SUM([Value]) AS value\nFROM d\nWHERE LocalDay < (SELECT MAX(LocalDay) FROM d)\nGROUP BY LocalDay\nORDER BY LocalDay DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Last Full Day (${unit})",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Average daily usage over the 7 most recent full days reported.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH d AS (\n  SELECT CAST(IntervalStart AT TIME ZONE '${tz}' AS date) AS LocalDay, [Value]\n  FROM dbo.UtilityUsageIntervals\n  WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n),\ndaily AS (\n  SELECT TOP 7 LocalDay, SUM([Value]) AS Total\n  FROM d\n  WHERE LocalDay < (SELECT MAX(LocalDay) FROM d)\n  GROUP BY LocalDay\n  ORDER BY LocalDay DESC\n)\nSELECT AVG(Total) AS value FROM daily;",
+          "refId": "A"
+        }
+      ],
+      "title": "7-Day Average (${unit}/day)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Total cost reported in the selected time range. Empty if your utility does not include cost in the download.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT SUM(Cost) AS value\nFROM dbo.UtilityUsageIntervals\nWHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n  AND $__timeFilter(IntervalStart);",
+          "refId": "A"
+        }
+      ],
+      "title": "Cost in Range",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "End of the newest interval imported. If this falls more than a couple of days behind, download a fresh file.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "text" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] },
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT DATEDIFF_BIG(millisecond, '1970-01-01', MAX(DATEADD(second, DurationSeconds, IntervalStart))) AS value\nFROM dbo.UtilityUsageIntervals\nWHERE SourceName = '${source}' AND ServiceKind = '${service}';",
+          "refId": "A"
+        }
+      ],
+      "title": "Data Through",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Total usage per local day.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "${unit}",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "sum"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT CAST(LocalDay AS datetime2) AT TIME ZONE '${tz}' AS time, SUM([Value]) AS [Daily use]\nFROM (\n  SELECT CAST(IntervalStart AT TIME ZONE '${tz}' AS date) AS LocalDay, [Value]\n  FROM dbo.UtilityUsageIntervals\n  WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n    AND $__timeFilter(IntervalStart)\n) d\nGROUP BY LocalDay\nORDER BY LocalDay;",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily Use (${unit})",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Each interval as the utility reported it. Breaks in the line are intervals the utility has no reading for, such as a power outage.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "${unit}",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "insertNulls": 3600000,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT IntervalStart AS time, [Value] AS [Interval use]\nFROM dbo.UtilityUsageIntervals\nWHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n  AND $__timeFilter(IntervalStart)\nORDER BY IntervalStart;",
+          "refId": "A"
+        }
+      ],
+      "title": "Interval Use (${unit})",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Average use per hourly interval by local hour of day, over the selected range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "${unit}",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "id": 7,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.9,
+        "groupWidth": 0.7,
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "orientation": "auto",
+        "showValue": "never",
+        "stacking": "none",
+        "tooltip": { "mode": "single", "sort": "none" },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT RIGHT('0' + CAST(LocalHour AS varchar(2)), 2) + ':00' AS [Hour], SUM([Value]) / COUNT(DISTINCT LocalDay) AS [Average use]\nFROM (\n  SELECT DATEPART(hour, IntervalStart AT TIME ZONE '${tz}') AS LocalHour,\n         CAST(IntervalStart AT TIME ZONE '${tz}' AS date) AS LocalDay, [Value]\n  FROM dbo.UtilityUsageIntervals\n  WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n    AND DurationSeconds <= 3600\n    AND $__timeFilter(IntervalStart)\n) h\nGROUP BY LocalHour\nORDER BY LocalHour;",
+          "refId": "A"
+        }
+      ],
+      "title": "Use by Time of Day (${unit} per hour)",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+      "description": "Stretches with no reading from the utility. A dead meter logs nothing, so power outages show up here. Generator-supplied use never reaches the utility's data.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Hours missing" }, "properties": [{ "id": "decimals", "value": 1 }] }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 22 },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT GapStart AS [From], GapEnd AS [To], DATEDIFF(minute, GapStart, GapEnd) / 60.0 AS [Hours missing]\nFROM (\n  SELECT DATEADD(second, DurationSeconds, IntervalStart) AS GapStart,\n         LEAD(IntervalStart) OVER (ORDER BY IntervalStart) AS GapEnd\n  FROM dbo.UtilityUsageIntervals\n  WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1\n    AND $__timeFilter(IntervalStart)\n) g\nWHERE GapEnd > GapStart\nORDER BY GapStart DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Gaps in Utility Data",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["electric", "green-button", "utilities"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+        "definition": "SELECT DISTINCT SourceName FROM dbo.UtilityUsage ORDER BY SourceName",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Source",
+        "multi": false,
+        "name": "source",
+        "options": [],
+        "query": "SELECT DISTINCT SourceName FROM dbo.UtilityUsage ORDER BY SourceName",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+        "definition": "SELECT DISTINCT ServiceKind FROM dbo.UtilityUsage WHERE SourceName = '${source}' ORDER BY ServiceKind",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Service",
+        "multi": false,
+        "name": "service",
+        "options": [],
+        "query": "SELECT DISTINCT ServiceKind FROM dbo.UtilityUsage WHERE SourceName = '${source}' ORDER BY ServiceKind",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "mssql", "uid": "${DS_MSSQL}" },
+        "definition": "SELECT TOP 1 Unit FROM dbo.UtilityUsage WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1",
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "unit",
+        "options": [],
+        "query": "SELECT TOP 1 Unit FROM dbo.UtilityUsage WHERE SourceName = '${source}' AND ServiceKind = '${service}' AND FlowDirection = 1",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": { "selected": false, "text": "Eastern Standard Time", "value": "Eastern Standard Time" },
+        "description": "Windows time zone name used to split days and hours, for example 'Eastern Standard Time' or 'Pacific Standard Time'. Handles daylight saving.",
+        "hide": 0,
+        "label": "Time zone",
+        "name": "tz",
+        "options": [{ "selected": true, "text": "Eastern Standard Time", "value": "Eastern Standard Time" }],
+        "query": "Eastern Standard Time",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": { "from": "now-30d", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Utility Usage",
+  "uid": null,
+  "weekStart": ""
+}

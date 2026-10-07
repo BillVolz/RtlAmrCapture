@@ -62,11 +62,11 @@ namespace RtlAmrCapture.Services
                     {
                         try
                         {
-                            await ScanFolder(import.Name!, import.WatchFolder!, stoppingToken);
+                            await ScanFolder(import.Config.Name!, import.Config.WatchFolder!, import.Zone, stoppingToken);
                         }
                         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                         {
-                            _logger.LogError(ex, "Green Button scan of {folder} failed.", import.WatchFolder);
+                            _logger.LogError(ex, "Green Button scan of {folder} failed.", import.Config.WatchFolder);
                         }
                     }
 
@@ -79,7 +79,7 @@ namespace RtlAmrCapture.Services
             }
         }
 
-        private async Task ScanFolder(string sourceName, string folder, CancellationToken cancellationToken)
+        private async Task ScanFolder(string sourceName, string folder, TimeZoneInfo zone, CancellationToken cancellationToken)
         {
             Directory.CreateDirectory(folder);
 
@@ -98,7 +98,7 @@ namespace RtlAmrCapture.Services
                 GreenButtonParseResult result;
                 try
                 {
-                    result = GreenButtonParser.ParseFile(file, sourceName);
+                    result = GreenButtonParser.ParseFile(file, sourceName, zone);
                 }
                 catch (Exception ex) when (ex is GreenButtonFormatException or InvalidDataException)
                 {
@@ -147,9 +147,9 @@ namespace RtlAmrCapture.Services
             File.Move(file, target);
         }
 
-        private List<GreenButtonImport> GetValidImports()
+        private List<(GreenButtonImport Config, TimeZoneInfo Zone)> GetValidImports()
         {
-            var valid = new List<GreenButtonImport>();
+            var valid = new List<(GreenButtonImport Config, TimeZoneInfo Zone)>();
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var import in _serviceConfiguration.GreenButtonImports ?? Array.Empty<GreenButtonImport>())
             {
@@ -168,7 +168,21 @@ namespace RtlAmrCapture.Services
                     _logger.LogError("Green Button import {name} skipped: another import already uses that Name.", import.Name);
                     continue;
                 }
-                valid.Add(import);
+                var zone = TimeZoneInfo.Local;
+                if (!string.IsNullOrWhiteSpace(import.TimeZone))
+                {
+                    try
+                    {
+                        zone = TimeZoneInfo.FindSystemTimeZoneById(import.TimeZone);
+                    }
+                    catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+                    {
+                        _logger.LogError("Green Button import {name} skipped: unknown TimeZone {timeZone}. Use a Windows ID such as \"Eastern Standard Time\".",
+                            import.Name, import.TimeZone);
+                        continue;
+                    }
+                }
+                valid.Add((import, zone));
             }
             return valid;
         }

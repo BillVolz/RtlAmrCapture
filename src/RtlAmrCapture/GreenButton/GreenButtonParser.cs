@@ -30,11 +30,12 @@ namespace RtlAmrCapture.GreenButton
         private static readonly XNamespace Atom = "http://www.w3.org/2005/Atom";
         private static readonly XNamespace Espi = "http://naesb.org/espi";
 
-        // ESPI unit-of-measure codes.
+        // ESPI unit-of-measure and reading-kind codes.
+        private const int UomWatts = 38;
         private const int UomWattHours = 72;
+        private const int ReadingKindDemand = 8;
         private static readonly Dictionary<int, string> UnitNames = new()
         {
-            [38] = "W",
             [42] = "m3",
             [119] = "ft3",
             [169] = "therm",
@@ -43,12 +44,14 @@ namespace RtlAmrCapture.GreenButton
         /// <summary>
         /// Parses a .xml file, or every .xml entry in a .zip file (utilities often zip the download).
         /// </summary>
-        public static GreenButtonParseResult ParseFile(string path, string sourceName)
+        /// <param name="wallClockZone">Time zone for files that record local clock times as UTC
+        /// (see <see cref="Parse"/>). Defaults to the server's time zone.</param>
+        public static GreenButtonParseResult ParseFile(string path, string sourceName, TimeZoneInfo? wallClockZone = null)
         {
             if (!path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                return Parse(stream, sourceName);
+                return Parse(stream, sourceName, wallClockZone);
             }
 
             ZipArchive archive;
@@ -69,14 +72,14 @@ namespace RtlAmrCapture.GreenButton
                     .Where(e => e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
                     .ToList();
                 if (xmlEntries.Count == 0)
-                    throw new GreenButtonFormatException("The zip file contains no .xml files.");
+                    throw new GreenButtonFormatException("The zip file contains no .xml files. Download the Green Button XML format, not CSV.");
 
                 var readings = new List<UtilityReading>();
                 var skipped = 0;
                 foreach (var entry in xmlEntries)
                 {
                     using var stream = entry.Open();
-                    var result = Parse(stream, sourceName);
+                    var result = Parse(stream, sourceName, wallClockZone);
                     readings.AddRange(result.Readings);
                     skipped += result.SkippedReadings;
                 }
@@ -85,7 +88,7 @@ namespace RtlAmrCapture.GreenButton
             }
         }
 
-        public static GreenButtonParseResult Parse(Stream xml, string sourceName)
+        public static GreenButtonParseResult Parse(Stream xml, string sourceName, TimeZoneInfo? wallClockZone = null)
         {
             XDocument doc;
             try
@@ -112,6 +115,20 @@ namespace RtlAmrCapture.GreenButton
                 throw new GreenButtonFormatException(
                     "No interval data found. Download the Green Button usage file, not a bill or summary.");
 
+            // Opower, which hosts Green Button for PECO and many other utilities, has a known quirk
+            // handled below. Its resource hrefs all live under /Opower/espi/.
+            var isOpower = doc.Descendants(Atom + "link")
+                .Any(l => ((string?)l.Attribute("href"))?.Contains("/opower/espi/", StringComparison.OrdinalIgnoreCase) == true);
+
+            // ESPI start times are meant to be UTC, but Opower writes local clock time as if it were
+            // UTC and declares a zero offset: PECO's reading for midnight Eastern is stamped
+            // 00:00Z. Left alone, every hour lands 4-5 hours early. When Opower declares no
+            // offset, read the times as local clock time instead. A file with a real offset is
+            // taken at its word, in case Opower ever fixes this.
+            var startsAreLocal = isOpower
+                && doc.Descendants(Espi + "LocalTimeParameters").All(ltp => (ChildLong(ltp, "tzOffset") ?? 0) == 0);
+            var zone = wallClockZone ?? TimeZoneInfo.Local;
+
             var readings = new List<UtilityReading>();
             var skipped = 0;
             foreach (var block in intervalBlocks)
@@ -137,10 +154,23 @@ namespace RtlAmrCapture.GreenButton
 
                 var usagePointId = LastSegment(usagePoint?.SelfKey ?? usagePointKey) ?? "default";
                 var rt = readingType.Content;
+                var uom = ChildInt(rt, "uom");
+
+                // Demand (power) series are not usage. Opower files repeat the hourly energy
+                // values as a second "demand" series in W, which would otherwise double count.
+                if (ChildInt(rt, "kind") == ReadingKindDemand || uom == UomWatts)
+                    continue;
+
                 var serviceKind = ServiceKindName(usagePoint?.Content, rt);
                 var flowDirection = ChildInt(rt, "flowDirection") ?? 1;
                 var multiplier = ChildInt(rt, "powerOfTenMultiplier") ?? 0;
-                var uom = ChildInt(rt, "uom");
+
+                // Opower electric files declare Wh with a x1000 multiplier, but the values are
+                // already plain Wh: 2820 is 2.82 kWh, matching the utility's own CSV export and
+                // bill. Taken literally the multiplier inflates usage 1000-fold. The same
+                // export's gas file (millitherms, multiplier -3) is correct, so this is narrow.
+                if (isOpower && uom == UomWattHours && multiplier == 3)
+                    multiplier = 0;
                 var unit = uom == UomWattHours ? "kWh"
                     : uom.HasValue && UnitNames.TryGetValue(uom.Value, out var name) ? name
                     : uom.HasValue ? $"uom{uom}" : "unknown";
@@ -167,7 +197,8 @@ namespace RtlAmrCapture.GreenButton
 
                     readings.Add(new UtilityReading(
                         sourceName, usagePointId, serviceKind, flowDirection,
-                        DateTimeOffset.FromUnixTimeSeconds(start.Value), duration.Value,
+                        startsAreLocal ? FromLocalClock(start.Value, zone) : DateTimeOffset.FromUnixTimeSeconds(start.Value),
+                        NormalizeDuration(duration.Value),
                         scaled, unit, cost, quality));
                 }
             }
@@ -209,6 +240,31 @@ namespace RtlAmrCapture.GreenButton
                 null => "Unknown",
                 _ => $"Commodity{commodity}",
             };
+        }
+
+        /// <summary>
+        /// Some utilities (Opower among them) give inclusive interval lengths: 3599 seconds for
+        /// an hour, 899 for 15 minutes. Taken as-is, every interval would end a second before
+        /// the next begins, and gap detection would report a one-second outage every hour.
+        /// </summary>
+        private static int NormalizeDuration(int seconds) =>
+            seconds % 60 == 59 ? seconds + 1 : seconds;
+
+        /// <summary>
+        /// Converts a "local clock time written as UTC" timestamp to the real instant.
+        /// </summary>
+        /// <remarks>
+        /// At the autumn change the 1 AM hour happens twice; this picks the first (daylight)
+        /// occurrence. If a file lists both hours under the same clock time, they collapse to
+        /// one row in <see cref="Deduplicate"/>, losing one hour of that day.
+        /// </remarks>
+        private static DateTimeOffset FromLocalClock(long start, TimeZoneInfo zone)
+        {
+            var clock = DateTime.SpecifyKind(DateTimeOffset.FromUnixTimeSeconds(start).UtcDateTime, DateTimeKind.Unspecified);
+            var offset = zone.IsAmbiguousTime(clock)
+                ? zone.GetAmbiguousTimeOffsets(clock).Max()
+                : zone.GetUtcOffset(clock);
+            return new DateTimeOffset(clock, offset).ToUniversalTime();
         }
 
         private static decimal Scale(long value, int powerOfTen)

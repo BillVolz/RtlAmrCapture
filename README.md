@@ -50,13 +50,19 @@ ESPI XML format). The service can watch a folder and load those files into the s
 
    ```json
    "GreenButtonImports": [
-     { "Name": "PECO Home", "WatchFolder": "C:\\GreenButton\\Home" }
+     { "Name": "PECO Home", "WatchFolder": "C:\\GreenButton\\Home", "TimeZone": "Eastern Standard Time" }
    ]
    ```
 
+   `TimeZone` is optional and defaults to the server's own. It only matters for utilities whose
+   Green Button service is run by Opower (PECO and many others): their files record local clock
+   time as if it were UTC, and the importer needs the meter's time zone to correct it. Use a
+   Windows time zone ID.
+
 2. Download your usage from the utility's website. Look for **Green Button** or **Download My
-   Data** in the usage section of your account, and pick the XML format (not CSV) and the longest
-   date range offered.
+   Data** in the usage section of your account. Choose usage for a range of days (not bill
+   totals), the **XML** format (CSV isn't supported), and the longest range offered. At PECO that's
+   **My Green Button Data -> Download my data -> Export usage for a range of days -> XML**.
 3. Drop the `.xml` file, or the `.zip` it came in, into the watch folder.
 
 Within a minute the file is loaded into `dbo.UtilityUsage` and moved to a `processed` subfolder.
@@ -66,6 +72,11 @@ database can't be reached, the file stays put and is retried on the next scan.
 Re-importing is safe: overlapping downloads update the intervals already stored instead of
 duplicating them. So a routine is simply to download the last few weeks now and then and drop
 the file in. One file can hold several meters (electric and gas, say); each is stored separately.
+
+Opower-hosted files have a few quirks the importer corrects automatically, checked against
+PECO's own CSV export of the same month: electric values carry a scaling factor 1000 times too
+large, each hour also appears as a duplicate "demand" series, and hours are marked 3,599 seconds
+long. Demand series are skipped for all utilities, since they're power readings rather than usage.
 
 Keep each `Name` unchanged once you've imported data. It is part of every row's identity, so a
 renamed source starts a new series instead of updating the old one.
@@ -114,7 +125,7 @@ All settings live under `ServiceConfiguration` in `appsettings.json`.
 | `StartupFailuresBeforeExit` | 10 | Consecutive failed capture attempts before the service exits, when no reading has ever arrived. `0` retries forever instead of exiting. |
 | `RestartBackoffBaseMs` | 1000 | Base delay between capture restarts, doubling per consecutive failure. Resets once a reading arrives. |
 | `RestartBackoffMaxMs` | 60000 | Upper bound on the restart backoff. |
-| `GreenButtonImports` | (none) | Folders to watch for Green Button downloads, each with a `Name` and `WatchFolder`. Omit to turn the importer off. |
+| `GreenButtonImports` | (none) | Folders to watch for Green Button downloads, each with a `Name`, a `WatchFolder` and an optional `TimeZone`. Omit to turn the importer off. |
 | `GreenButtonScanIntervalSeconds` | 60 | How often to check the Green Button folders for new files. |
 | `Connections` | (required) | One entry per destination database, each naming a key in `ConnectionStrings`. |
 

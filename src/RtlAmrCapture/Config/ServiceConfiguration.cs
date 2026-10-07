@@ -79,6 +79,13 @@ namespace RtlAmrCapture.Config
         /// subfolder; unreadable ones move to "failed".
         /// </summary>
         public string? WatchFolder { get; set; }
+
+        /// <summary>
+        /// Windows time zone ID of the meter, such as "Eastern Standard Time". Only used for
+        /// files that record local clock times as UTC, which Opower-hosted utilities (PECO among
+        /// them) do. Defaults to the server's time zone.
+        /// </summary>
+        public string? TimeZone { get; set; }
     }
 
     public class DataBaseConnections

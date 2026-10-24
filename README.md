@@ -7,7 +7,7 @@ A windows service that can capture readings from "smart meters" and log them to 
 - [rtl_tcp](https://github.com/rtlsdrblog/rtl-sdr-blog/releases) (rtl-sdr-blog build, V1.3.2 or later) to tune and read the rtl-sdr dongle.
 - [rtlamr](https://github.com/bemasher/rtlamr) to decode the SCM+ messages from the feed.
 - GoLang >=1.11 (Go build environment setup guide: http://golang.org/doc/code.html) to build rtlamr.
-- [.NET 6 Runtime](https://dotnet.microsoft.com/download/dotnet/6.0), or the SDK if building from source.
+- [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), or the SDK if building from source.
 - SQL Server (Developer or Express Edition).
 
 ### Usage

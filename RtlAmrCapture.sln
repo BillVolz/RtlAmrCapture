@@ -5,6 +5,10 @@ VisualStudioVersion = 17.4.33403.182
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RtlAmrCapture", "src\RtlAmrCapture\RtlAmrCapture.csproj", "{3602C17A-3506-4E03-9BE6-3B525BA0CE1E}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{45A58961-E38E-4FF6-BA57-6DFDFA5647FD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RtlAmrCapture.Tests", "tests\RtlAmrCapture.Tests\RtlAmrCapture.Tests.csproj", "{927822EF-EE49-433A-AD53-868A6583D0A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,11 +19,18 @@ Global
 		{3602C17A-3506-4E03-9BE6-3B525BA0CE1E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3602C17A-3506-4E03-9BE6-3B525BA0CE1E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3602C17A-3506-4E03-9BE6-3B525BA0CE1E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{927822EF-EE49-433A-AD53-868A6583D0A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{927822EF-EE49-433A-AD53-868A6583D0A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{927822EF-EE49-433A-AD53-868A6583D0A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{927822EF-EE49-433A-AD53-868A6583D0A2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BB9893EA-2826-4B5B-9C81-81CDBD3DCEBB}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{927822EF-EE49-433A-AD53-868A6583D0A2} = {45A58961-E38E-4FF6-BA57-6DFDFA5647FD}
 	EndGlobalSection
 EndGlobal
